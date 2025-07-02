@@ -1,0 +1,822 @@
+---
+title: "Project- Differentially expressed genes"
+author: "Julia Lapucha, Astghik Sarukhanyan, Caroline Forsythe"
+date: "2024-05-22"
+output:
+  html_document:
+    toc: true
+    toc_depth: '4'
+    toc_float: true 
+    df_print: paged
+  pdf_document:
+    latex_engine: xelatex
+    toc: true
+    toc_depth: 4
+urlcolor: blue
+---
+
+How can insights into methylation associated gene regulation and gene expression in endometriosis, aid in the identification of potential biomarkers?
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = F, message = F)
+```
+
+This Markdown will perform a differential expression analysis based on DESEQ2
+[Example](https://lashlock.github.io/compbio/R_presentation.html)
+
+
+Libraries:
+
+```{r}
+
+pacman::p_load(tidyverse, ggplot2, DESeq2, data.table, vsn, apeglm, biomaRt, ggfortify, BiocManager, ComplexHeatmap, reshape2, EnhancedVolcano)
+library("pheatmap")
+library("RColorBrewer")
+library(EnsDb.Hsapiens.v86)
+library(org.Hs.eg.db)
+library(ggfortify) #pca
+library(plotly)
+
+## setting working directory + load workspace 
+dir <- "C:/Users/astghik/Documents/Uni/Master/DATA SCIENCE/Project/"
+load(paste0(dir, "ANALYSIS/DEGs/rnaseq.RData"))
+
+
+```
+
+# Count Data
+
+Loading the RNA-seq data: 
+
+```{r}
+
+## set working directory 
+
+data <- read.delim(paste0(dir, "DATA/rnaseq/GSE134056_countdata_rnaseq.txt"), 
+                   header = TRUE)
+head(data)
+
+dim(data)
+
+```
+
+
+# Sample Information 
+
+The data has 38 samples (including 22 control and 16 disease samples):
+
+```{r}
+sample_data <- read.table(paste0(dir, "DATA/rnaseq/sample_info.txt"), 
+                          header = TRUE, sep = "")
+sample_data
+
+table(sample_data$Group)
+```
+
+Order sample_data so that colnames of data matches with order of sample names (otherwise DESEQ won't run): 
+
+```{r}
+
+sample_data <- sample_data[match(colnames(data), sample_data$Name), ] 
+all(sample_data$Name == colnames(data))
+
+ggplot(sample_data, aes(x = Group, fill = Group)) +
+  geom_bar()
+
+```
+
+# DESEQ2
+
+Create a DESeqDataSet object:
+
+```{r }
+
+dds <- DESeqDataSetFromMatrix(countData = data,
+                              colData = sample_data,
+                              design = ~ Group)
+dim(dds)
+
+```
+
+
+## Pre - Filtering 
+
+Remove counts lower than 5: 
+
+```{r}
+
+keep <- rowSums(counts(dds)) >= 5
+dds <- dds[keep,]
+dim(dds)
+
+```
+
+
+## Define Contrasts or relevel 
+
+
+```{r}
+
+dds$Group <- factor(dds$Group, levels = c("control","disease"))
+dds
+
+```
+
+## RESULTS 
+
+```{r}
+
+dds <- DESeq(dds)
+res <- results(dds)
+res
+
+
+```
+
+# DATA EXPLORATION
+
+## MA PLOT
+
+Alpha threshold to pick ? Rather alpha = 0.1 (default). 
+Points will be colored blue if the adjusted p value is less than alpha. 
+Points which fall out of the window are plotted as open triangles pointing either up or down.
+
+```{r}
+
+plotMA(res, alpha = 0.05, main = "MA Plot: Control vs Disease")
+
+```
+
+Interpretation: A horizontal spread of points around the zero line indicates a balanced comparison, while a skewed spread might suggest biases
+
+```{r include = F, eval=FALSE}
+
+png(paste0(dir, "ANALYSIS/DEGs/Plots/MAplot.png"), 
+    width = 1600, height= 1000, res = 300)
+plotMA(res)
+dev.off()
+
+```
+
+High abs(LFC) for a lot of low count data.  
+
+
+## Shrinkage 
+
+Shrinkage might be useful (shrunken fold changes are useful for ranking genes by effect size and for visualization). 
+> The shrunken log fold changes are useful for ranking and visualization, without the need for arbitrary filters on low count genes. 
+
+[DESEQ2-Tutorial](https://bioconductor.org/packages/devel/bioc/vignettes/DESeq2/inst/doc/DESeq2.html)
+
+
+```{r}
+
+resNorm <- lfcShrink(dds, coef=2, type="normal")
+resLFC <- lfcShrink(dds, coef=2, type="apeglm")
+resAsh <- lfcShrink(dds, coef=2, type="ashr")
+
+```
+
+MA Plots after shrinkage:
+
+```{r fig.height=8}
+
+par(mfrow=c(2,2), mar=c(3,3,2,1))
+xlim <- c(1, 1e5); ylim <- c(-2, 2)
+plotMA(res, xlim=xlim,  main="Before Shrinkage")
+plotMA(resLFC, xlim=xlim, ylim=ylim, main="apeglm") # load library(apeglm) to work
+plotMA(resNorm, xlim=xlim, ylim=ylim, main="normal")
+plotMA(resAsh, xlim=xlim, ylim=ylim, main="ashr")
+mtext("MA Plots Comparison", outer = TRUE, cex = 0.9, line = -1, side = 2)
+
+
+```
+
+
+```{r eval = F, include=FALSE}
+
+png(paste0(dir, "ANALYSIS/DEGs/Plots/MAplots_all.png"), 
+    width = 1600, height= 1600, res = 310)
+
+par(mfrow=c(2,2), mar=c(3,3,2,1))
+
+xlim <- c(1, 1e5); ylim <- c(-2, 2)
+plotMA(res, xlim=xlim,  main="Before Shrinkage")
+plotMA(resLFC, xlim=xlim, ylim=ylim, main="apeglm") # load library(apeglm) to work
+plotMA(resNorm, xlim=xlim, ylim=ylim, main="normal")
+plotMA(resAsh, xlim=xlim, ylim=ylim, main="ashr")
+mtext("MA Plots Comparison", outer = TRUE, cex = 0.9, line = -1, side = 2)
+dev.off()
+
+```
+
+
+We'll prefer apeglm and use resLFC for visualization purposes of DEGs in plots like Heatmaps, VolcanoPlots etc. 
+
+[When use shrinken values?](https://hbctraining.github.io/DGE_workshop/lessons/05_DGE_DESeq2_analysis2.html)
+
+> For example, if you wanted to subset your significant genes based on fold change for further evaluation, you may want to use shruken values. 
+
+## VST
+
+
+In RNA-Seq data variance grows with the mean. 
+
+"This function calculates a variance stabilizing transformation (VST) from the fitted dispersion-mean relation(s) and then transforms the count data (normalized by division by the size factors or normalization factors), yielding a matrix of values which are now approximately homoskedastic (having constant variance along the range of mean values). The transformation also normalizes with respect to library size. The rlog is less sensitive to size factors, which can be an issue when size factors vary widely. These transformations are useful when checking for outliers or as input for machine learning techniques such as clustering or linear discriminant analysis." [source](https://rdrr.io/bioc/DESeq2/man/varianceStabilizingTransformation.html)
+
+
+Apply Variance stabilizing transformation (useful for clustering or when used as input in machine learning algoritgmis, data should be homoskedastic):
+
+```{r vsd}
+
+vsd <- vst(dds, blind=FALSE)
+meanSdPlot(assay(vsd))
+
+```
+
+
+```{r include = F}
+
+## save vsd plot 
+png(paste0(dir, "ANALYSIS/DEGs/Plots/VST_plot.png"), 
+    width = 1600, height= 1000, res = 300)
+meanSdPlot(assay(vsd))
+dev.off()
+
+
+
+```
+
+
+
+```{r}
+## save vsd as rds object to later use input for further analysis like WGCNA 
+## we later excluded the WGCNA 
+saveRDS(object = vsd, file = paste0(dir, "ANALYSIS/DEGs/Output/vsd.rds"))
+
+```
+
+
+## PCA
+
+> "PCA can be used to visualize variation between expression analysis samples. This method is especially useful for quality control, for example in identifying problems with your experimental design, mislabeled samples, or other problems." [PCA](https://assets.geneious.com/manual/2020.2/static/GeneiousManualsu109.html)
+
+
+Use vst transformed data for pca as recommended in Deseq2 Tutorial. 
+
+PCA Plot without differentiating between replicates:
+
+```{r}
+pcadata <- plotPCA(vsd, intgroup= c("Group", "Replicate"), returnData = T) #using the DESEQ2 plotPCA
+pcadata
+plotPCA(vsd, intgroup="Group")
+```
+
+Using ggplot2: 
+
+```{r}
+
+percentVar <- round(100 * attr(pcadata, "percentVar"))
+
+pca_plot <-ggplot(pcadata, aes(PC1, PC2, color = Group)) +
+  geom_point(size = 4) +
+  ggtitle("PCA Plot (RNAseq)") +
+  # theme_bw() +
+  theme_gray() +
+  xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+  ylab(paste0("PC2: ",percentVar[2],"% variance"))
+pca_plot
+
+
+```
+
+PCA Plot additionally differentiating between replicates:
+
+```{r}
+
+# vector of shapes for Replicate - we have 22 replicates 
+rep_shapes <- c(0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21) 
+
+pca_plot_shape <- ggplot(pcadata, aes(x = PC1, y = PC2, color = Group, 
+                    shape = as.factor(Replicate))) +
+  geom_point(size = 4) +
+  labs(title = "PCA Plot (RNAseq)", color = "Group", 
+       shape = "Replicate") +
+  scale_shape_manual(values = rep_shapes) +  # Manually specify shapes
+  xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+  ylab(paste0("PC2: ",percentVar[2],"% variance"))+
+  theme_gray()
+
+pca_plot_shape
+```
+
+```{r include = F}
+
+## SAVE PCA PLOTs INCLUDING REPLICATES 
+
+png(paste0(dir, "ANALYSIS/DEGs/Plots/pca_plot.png"), 
+    width = 1600, height= 1000, res = 300)
+plotPCA(vsd, intgroup="Group")
+dev.off()
+
+ggsave(plot=pca_plot,
+       filename = paste0(dir, "ANALYSIS/DEGs/Plots/PCAplot.png"),
+       height = 4, width = 6, dpi = 270)
+
+ggsave(plot=pca_plot_shape,
+       filename = paste0(dir, "ANALYSIS/DEGs/Plots/PCAplot_with_shapes.png"),
+       height = 4.5, width = 6.5, dpi = 270)
+```
+
+
+
+# ANNOTATION 
+
+FROM ENSEMBL TO GENE SYMBOLS:
+
+Using Genome wide annotation for Human:  [org.Hs.eg.db](https://bioconductor.org/packages/release/data/annotation/html/org.Hs.eg.db.html) 
+
+How to annotate data: 
+[INFO](https://www.bioconductor.org/help/course-materials/2015/UseBioconductorFeb2015/A01.5_Annotation.html)
+[OR](https://qfab-bioinformatics.github.io/workshops-RNAseq-analysis-with-R/gene-annotation.html)
+
+
+Using org.Hs.eg.db to find gene SYMBOLS, unfortunately some are missing, so we tried to use biomart to see, whether it works better and more gene symbols can be identified. 
+
+## org.Hs.eg.db
+
+```{r}
+
+annot<-mapIds(org.Hs.eg.db, keys = rownames(resLFC), 
+                         keytype = "ENSEMBL", column = "SYMBOL")
+
+sum(is.na(annot))
+
+```
+
+
+## Biomart
+
+Annotation using biomart:
+
+```{r}
+
+mart<- useEnsembl(biomart="ensembl",
+                  dataset="hsapiens_gene_ensembl",
+                  GRCh=38)
+# mart %>% listFilters() %>% View()
+# mart %>% listAttributes() %>% View()
+
+
+annot <- getBM(filters= "ensembl_gene_id",
+                   attributes=c("ensembl_gene_id","external_gene_name","description"),
+                   values= rownames(resLFC),
+                   mart= mart)
+
+```
+
+Still gene symbols missing, but less:
+
+```{r}
+annot %>% dplyr::filter(external_gene_name == "") %>% nrow
+
+```
+
+> Before Visualisation of significant DEGs we have to look into the GENE Symbols manually using the ENSEMBL DATA BASE
+
+[ENSEMBL](https://www.ensembl.org/index.html) 
+
+But first let's merge annotation information and shrinked results:
+
+```{r}
+
+resShrink <- resLFC %>% as.data.frame() %>% 
+  rownames_to_column(var = "ensembl_gene_id")
+
+resShrink<- merge(resShrink, annot, by="ensembl_gene_id") 
+head(resShrink)
+
+
+```
+
+> Results now contain annotated information 
+
+
+# DEGS
+
+Differentially expressed genes:
+
+After exploring our data and obtaining initial insights, we now aim to identify significant genes. By setting specific thresholds, we can extract these from our results. We'll consider genes as significant if they have a log2 fold change (LFC) greater than 0.5 and a p-value less than alpha. 
+
+Genes with a positive log2 fold change will be classified as upregulated, while those with a negative log2 fold change will be classified as downregulated (so we filtered only based on padj initially). 
+
+
+```{r}
+
+lfc_cutoff = 0.5
+alpha = 0.05
+sig_005 <- resShrink %>% as.data.frame() %>% 
+  mutate(gene_exp = ifelse(log2FoldChange < 0, "down", "up")) %>% 
+  dplyr::filter(padj < alpha) #  & abs(log2FoldChange < 0.5) 
+
+sig_005
+```
+
+How many significant DEGs (alpha < 0.05)?
+
+```{r}
+nrow(sig_005)
+## How many not annotated? 
+sig_005 %>% dplyr::filter(external_gene_name== "") %>% nrow()
+
+```
+
+```{r}
+
+hist(sig_005$log2FoldChange, 
+     main="Histogram of Log2 Fold Changes (p-adj < 0.05)", 
+     xlab="Log2 Fold Change", 
+     col = "#c77dff")
+# Add a vertical line at zero on the x-axis
+abline(v = 0, lty = 1, col = "red")#
+# dev.off()
+
+```
+
+
+
+```{r}
+
+sig_counts_t <-data[sig_005$ensembl_gene_id, ] %>% t() %>%
+  as.data.frame() %>% 
+  rownames_to_column(var = "Name")
+sig_counts_t
+
+
+sig_DEG_counts <- right_join(sample_data, sig_counts_t, by = "Name")
+sig_DEG_counts 
+
+
+```
+
+For Machine Learing we want to pick only the samples also evident in the methylation data:
+
+```{r}
+
+## load methylation sample data 
+sample_data_meth <- read.table(paste0(dir, "DATA/mbdseq/allMethylationSample_info.txt"),
+           header = T, sep = ",")
+sample_data_meth %>% view
+
+## only 37 samples left with row 17 deleted 
+subset_sig_DEG_counts <- sig_DEG_counts[sig_DEG_counts$Name %in% sample_data_meth$Sample, ] 
+
+
+```
+
+
+```{r}
+
+
+## some files we found useful for later workflow 
+
+saveRDS(object = sig_005, file = paste0(dir, "ANALYSIS/DEGs/Output/sig_005.rds"))
+write.csv(sig_005, paste0(dir, "ANALYSIS/DEGs/Output/sig_DEGs.csv"), row.names=FALSE)
+write.csv(sig_DEG_counts, paste0(dir, "ANALYSIS/DEGs/Output/sig_DEG_counts.csv"), row.names=FALSE)
+write.csv(subset_sig_DEG_counts, paste0(dir, "ANALYSIS/DEGs/Output/sig_DEG_counts_37samples.csv"), row.names=FALSE)
+
+
+
+```
+
+
+
+## Visualisation
+
+
+[Example1](https://hbctraining.github.io/Training-modules/planning_successful_rnaseq/lessons/data_visualization.html)
+[Example2](https://angus.readthedocs.io/en/2019/diff-ex-and-viz.html)
+[Example3](https://hbctraining.github.io/Intro-to-R-with-DGE/lessons/B1_DGE_visualizing_results.html)
+
+
+### VOLCANO PLOT
+
+Also look into documentation: [EnhancedVolcano](https://bioconductor.org/packages/devel/bioc/vignettes/EnhancedVolcano/inst/doc/EnhancedVolcano.html)
+
+Plot results:
+
+
+
+```{r fig.height=6.5}
+
+alpha = 0.05
+lfc_cutoff = 0.5
+
+EnhancedVolcano(sig_005,
+    lab = sig_005$external_gene_name,
+    x = 'log2FoldChange',
+    y = 'pvalue',
+    FCcutoff = lfc_cutoff, # cut-off for absolute log2 fold-change
+    title = "Volcano Plot of significant DEGs (significant only)", 
+    caption = paste("p < ", alpha, "and LFC Cutoff:", lfc_cutoff),
+    pCutoff = alpha, 
+    drawConnectors = TRUE,
+    widthConnectors = 0.75, 
+    pointSize = 1.5)
+
+EnhancedVolcano(resShrink,
+    lab = resShrink$external_gene_name,
+    x = 'log2FoldChange',
+    y = 'pvalue',
+    FCcutoff = lfc_cutoff, # cut-off for absolute log2 fold-change
+    title = "Volcano Plot of significant DEGs (disease vs control)", 
+    caption = paste("p < ", alpha, "and LFC Cutoff:", lfc_cutoff),
+    pCutoff = alpha, 
+    drawConnectors = TRUE,
+    widthConnectors = 0.75, 
+    pointSize = 1.5)
+
+
+```
+
+
+```{r include = F}
+
+png(paste0(dir, "ANALYSIS/DEGs/Plots/VolcanoPlot.png"), 
+    width = 2200, height= 1400, res = 280)
+
+EnhancedVolcano(resShrink,
+    lab = resShrink$external_gene_name,
+    x = 'log2FoldChange',
+    y = 'pvalue',
+    FCcutoff = lfc_cutoff, # cut-off for absolute log2 fold-change
+    title = "Volcano Plot of significant DEGs (disease vs control)", 
+    caption = paste("p < ", alpha, "and LFC Cutoff:", lfc_cutoff),
+    pCutoff = alpha, 
+    drawConnectors = TRUE,
+    widthConnectors = 0.75, 
+    pointSize = 1.5)
+dev.off()
+
+
+png(paste0(dir, "ANALYSIS/DEGs/Plots/VolcanoPlot_significant_only.png"), 
+    width = 2100, height= 1400, res = 280)
+
+EnhancedVolcano(sig_005,
+    lab = sig_005$external_gene_name,
+    x = 'log2FoldChange',
+    y = 'pvalue',
+    FCcutoff = lfc_cutoff, # cut-off for absolute log2 fold-change
+    title = "Volcano Plot of significant DEGs (significant only)", 
+    caption = paste("p < ", alpha, "and LFC Cutoff:", lfc_cutoff),
+    pCutoff = alpha, 
+    drawConnectors = TRUE,
+    widthConnectors = 0.75, 
+    pointSize = 1.5)
+dev.off()
+
+
+```
+
+
+### HEATMAP
+
+Also plotted a Heatmap for top 30 genes, but excluded this plot from the presentation to make the slides be more uniform. Since we didn't have time to recreate this for the methylation data. 
+
+Plot top 30 genes (based on LFC):
+
+```{r}
+top <-sig_005[order(abs(sig_005$log2FoldChange), 
+                             decreasing = TRUE), ][1:30, ]
+
+
+vsd_top <- assay(vsd)[top$ensembl_gene_id,]
+vsd_top %>% head
+set.seed(1)
+
+## are sample names and order of sample names in vsd the same 
+all(sample_data$Name == colnames(vsd_top)) # YES, we can add group column to plot 
+
+
+## check if ensembl ids match gene symbols 
+all(rownames(vsd_top) == top$ensembl_gene_id) # should return TRUE
+```
+
+Out of 30 top genes only 25 have gene symbols:
+
+```{r}
+# filter out entries in top that don't have matching gene symbols
+filtered_top <- top[!is.na(top$external_gene_name) & nchar(top$external_gene_name) > 0, ]
+ 
+
+# subset vsd_top based on the filtered top data
+
+vsd_top_filtered <- assay(vsd)[filtered_top$ensembl_gene_id, ]
+
+# check if row names in vsd_top_filtered match Ensembl IDs in filtered_top
+all(rownames(vsd_top_filtered) == filtered_top$ensembl_gene_id) # should return TRUE
+
+all(colnames(vsd_top_filtered) == sample_data$Name) # should return TRUE
+
+# generate the heatmap with gene symbols as row labels
+pheatmap(vsd_top_filtered, scale="row", 
+         labels_row = filtered_top$external_gene_name, 
+         labels_col = sample_data$Group, 
+         cluster_rows = TRUE)
+
+### order by samples if needed?
+
+
+```
+
+
+```{r include=FALSE, eval=FALSE}
+
+png(paste0(dir, "ANALYSIS/DEGs/Plots/Heatmap_filtered_missing_symbols.png"), 
+    width = 2100, height= 1400, res = 230)
+pheatmap(vsd_top_filtered, scale="row", 
+         labels_row = filtered_top$external_gene_name, 
+         labels_col = sample_data$Group, 
+         cluster_rows = TRUE)
+dev.off()
+
+
+```
+
+### Boxplot 
+
+Boxplot of control vs disease (count distribution across samples):
+
+```{r cache = T}
+
+counts <-counts(dds) %>% 
+  as.data.frame() %>% 
+  rownames_to_column(var = "ENSEMBL_ID")
+
+counts_melt <- reshape2::melt(counts, 
+                  variable.name = "Name", 
+                  value.name = "Count")
+
+counts_merge <- merge(counts_melt, 
+                          sample_data, by = "Name") %>% arrange(Group)
+
+counts_merge <- counts_merge %>%
+  mutate(Name = factor(Name, levels = unique(Name[order(Group)])))
+
+
+boxplot_rep_all <- ggplot(counts_merge, 
+                     aes(x = reorder(Name, Group), 
+                         y = log(Count), 
+                         color = Group)) +
+  geom_boxplot() +
+  geom_point(aes(color  = Group))+
+  labs(title = "Distribution of Counts (disease vs control)",
+       x = "Sample",
+       y = "Log_Count") + 
+  theme_gray()+
+  theme(axis.text.x = element_text(face = "bold", 
+                                   size = 10, angle = 90, hjust = 1)) +
+  theme(axis.text.y = element_text(face = "bold", size =10)) 
+
+
+boxplot_rep_all
+
+
+
+```
+
+
+```{r }
+
+sig_counts <- counts(dds)[sig_005$ensembl_gene_id, ] %>%
+   as.data.frame() %>%
+   rownames_to_column(var = "ENSEMBL_ID")
+
+sig_counts_melt <- reshape2::melt(sig_counts,
+                   variable.name = "Name",
+                   value.name = "Count")
+
+
+sig_counts_merge <- merge(sig_counts_melt,
+                           sample_data, by = "Name") %>% arrange(Group)
+
+
+
+sig_counts_merge <- sig_counts_merge %>%
+  mutate(Name = factor(Name, levels = unique(Name[order(Group)])))
+
+
+boxplot_rep_sig <- ggplot(sig_counts_merge,
+                     aes(x = reorder(Name, Group),
+                         y = log(Count),
+                         color = Group)) +
+  geom_boxplot() +
+  geom_point(aes(color  = Group))+
+  labs(title = "Distribution of Counts (disease vs control; p.adj < 0.05)",
+       x = "Sample",
+       y = "Log_Count") +
+  theme_gray()+
+  theme(axis.text.x = element_text(face = "bold",
+                                   size = 10, angle = 90, hjust = 1)) +
+  theme(axis.text.y = element_text(face = "bold", size =10))
+
+
+boxplot_rep_sig
+
+
+```
+
+
+
+```{r}
+top10 <- sig_005[order(abs(sig_005$log2FoldChange), decreasing = TRUE), ][1:10, ]
+# top10 <-subset(sig_counts_merge, ENSEMBL_ID %in% top10$ensembl_gene_id)
+
+
+top10_counts <- sig_counts_merge %>% 
+  dplyr::filter(ENSEMBL_ID %in% top10$ensembl_gene_id)
+top10
+
+```
+
+
+```{r}
+
+top10ids<-top10_counts$ENSEMBL_ID %>% unique()
+
+
+top10_annot<-sig_005 %>% dplyr::select(ensembl_gene_id, external_gene_name) %>% 
+  dplyr::filter(ensembl_gene_id %in% top10ids)
+top10_annot
+
+```
+
+### Boxplot top 10 Genes
+
+Boxplot of top 20 genes based on LFC:
+
+```{r}
+
+boxplot_top_gene <- ggplot(top10_counts, 
+                     aes(x = reorder(ENSEMBL_ID, Group), 
+                         y = log(Count), 
+                         color = Group)) +
+  geom_boxplot() +
+  geom_point(aes(color  = Group))+
+  labs(title = "Distribution of Counts (Top 10 genes; p.adj < 0.05)",
+       x = "Sample",
+       y = "Log_Count") + 
+  theme_gray()+
+  theme(axis.text.x = element_text(face = "bold", 
+                                   size = 10, angle = 45, hjust = 1)) +
+  theme(axis.text.y = element_text(face = "bold", size =10)) 
+  # geom_text(aes(label = top10_annot$external_gene_name), 
+  #           hjust = -0.3, vjust = 0.5, size = 4) 
+
+
+boxplot_top_gene
+
+
+```
+
+
+
+
+```{r include=FALSE}
+
+
+ggsave(plot=boxplot_rep_all,
+       filename = paste0(dir, "ANALYSIS/DEGs/Plots/boxplot_of_all_counts.png"),
+       height = 5, width = 9, dpi = 320)
+
+ggsave(plot=boxplot_rep_sig,
+       filename = paste0(dir, "ANALYSIS/DEGs/Plots/boxplot_of_sig_counts.png"),
+       height = 5, width = 9, dpi = 320)
+
+
+ggsave(plot=boxplot_top_gene,
+       filename = paste0(dir, "ANALYSIS/DEGs/Plots/boxplot_of_top10_genes.png"),
+       height = 5, width = 8.5, dpi = 320)
+
+
+```
+
+
+# SessionInfo 
+
+```{r}
+sessionInfo()
+
+```
+
+
+```{r}
+## save workspace 
+save.image(paste0(dir, "ANALYSIS/DEGs/rnaseq.RData"))
+
+
+```
+
+
+

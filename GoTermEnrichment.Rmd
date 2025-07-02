@@ -1,0 +1,402 @@
+---
+title: "Project - Go Term Enrichment Analysis"
+author: "Julia Lapucha, Astghik Sarukhanyan, Caroline Forsythe"
+date: "2024-05-22"
+output:
+  html_document:
+    toc: true
+    toc_depth: '4'
+    df_print: paged
+  pdf_document:
+    latex_engine: xelatex
+    toc: true
+    toc_depth: 4
+urlcolor: blue
+---
+
+```{r setup, include=FALSE, warning=FALSE, message=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+Analysis workflow based on Bioconductor package ClusterProfiler [ClusterProfiler-Workflow-Link](https://yulab-smu.top/biomedical-knowledge-mining-book/clusterprofiler-go.html)
+
+```{r}
+pacman::p_load(tidyverse, ggplot2, DESeq2, data.table, vsn, apeglm, biomaRt, ggfortify, BiocManager, ComplexHeatmap, clusterProfiler, DOSE, enrichplot)
+library("RColorBrewer")
+library(GOstats); library(GO.db); library(org.Hs.eg.db); library(ReactomePA)
+
+
+dir <- "C:/Users/astghik/Documents/Uni/Master/DATA SCIENCE/Project/"
+load(paste0(dir, "ANALYSIS/GoTermEnrichment/goTermEnrichment.RData"))
+```
+
+
+```{r}
+
+count.matrix <- read.delim(paste0(dir, "DATA/rnaseq/GSE134056_countdata_rnaseq.txt"), 
+                   header = TRUE)
+head(count.matrix)
+
+```
+
+```{r}
+
+count.meth <- read.csv(file = paste0(dir, "ANALYSIS/MBDseq/annotedMethylationCounts_allsamples.csv"), header = T) %>% as.data.frame() %>% column_to_rownames(var = "X")
+
+
+```
+
+
+Load data from Differential Expression Analysis:
+
+```{r}
+sig_005 = readRDS(file = paste0(dir, "ANALYSIS/DEGs/Output/sig_005.rds"))
+head(sig_005)
+```
+
+Load data from Differential Methylation Analysis:
+
+```{r}
+
+sig_DMR = readRDS(file = paste0(dir, "ANALYSIS/MBDseq/Output/sig_DMR.rds"))
+head(sig_DMR)
+
+```
+
+Is there any overlap in Ensembl Ids between significant DMRs and DEGs?
+
+```{r}
+
+intersect(sig_005$ensembl_gene_id, sig_DMR$ensembl_gene_id)  
+
+```
+
+
+
+# GO TERMS 
+
+## Differential Expression Analysis
+
+```{r}
+
+ggo <- groupGO(gene = sig_005$ensembl_gene_id,
+               OrgDb    = org.Hs.eg.db,
+               keyType = "ENSEMBL",
+               ont      = "BP",
+               level    = 4,
+               readable = TRUE)
+
+head(ggo)
+
+
+
+ggoM <- groupGO(gene = sig_DMR$ensembl_gene_id,
+               OrgDb    = org.Hs.eg.db,
+               keyType = "ENSEMBL",
+               ont      = "BP",
+               level    = 4,
+               readable = TRUE)
+
+
+
+
+```
+
+# GO over-representation analysis
+
+
+```{r}
+
+ego <- enrichGO(gene          = sig_005$ensembl_gene_id,
+                universe      = rownames(count.matrix),
+                keyType = "ENSEMBL",
+                OrgDb         = org.Hs.eg.db,
+                ont           = "BP",
+                pAdjustMethod = "BH", 
+                pvalueCutoff  = 0.5,
+                qvalueCutoff  = 0.5, 
+        readable      = TRUE)
+head(ego)
+
+ego@result %>% dplyr::filter(p.adjust < 0.05)
+
+
+
+egoM <- enrichGO(gene          = sig_DMR$ensembl_gene_id,
+                universe      = rownames(count.meth),
+                keyType = "ENSEMBL",
+                OrgDb         = org.Hs.eg.db,
+                ont           = "BP",
+                pAdjustMethod = "BH",
+                pvalueCutoff  = 0.5,
+                qvalueCutoff  = 0.5,
+        readable      = TRUE)
+
+
+
+
+```
+
+# VISUALIZATION
+
+[ALSO LOOK HERE](https://yulab-smu.top/biomedical-knowledge-mining-book/enrichplot.html?q=dotpl#dot-plot)
+
+```{r fig.height=8}
+
+goplot(ego)
+dotplot(ego, showCategory = 15)
+barplot(ego, showCategory=15) 
+x<-pairwise_termsim(ego)
+emapplot(x, showCategory = 10)
+
+```
+
+
+```{r fig.height=8}
+
+goplot(egoM)
+dotplot(egoM, showCategory = 15)
+barplot(egoM, showCategory=15) 
+y<-pairwise_termsim(egoM)
+emapplot(y, showCategory = 15)
+
+
+```
+
+
+# DIFFERENT LIBRARIES 
+## GO STATS 
+
+Since results were not significant, we wanted to check if this is still the case when trying out different libraries rather than clusterProfiler. 
+
+[Tutorial](https://girke.bioinformatics.ucr.edu/GEN242/tutorials/rfea/rfea/)
+
+```{r cache = T}
+
+
+## Define universe and test sample set
+# geneUniverse <- rownames(count.matrix)
+
+geneUniverse <- bitr(rownames(count.matrix), 
+     fromType="ENSEMBL", toType="ENTREZID", 
+     OrgDb="org.Hs.eg.db")
+
+geneSample <-bitr(sig_005$ensembl_gene_id, 
+     fromType="ENSEMBL", toType="ENTREZID", 
+     OrgDb="org.Hs.eg.db")
+
+# geneUniverse <- keys(org.Hs.eg.db, keytype = "ENSEMBL")
+# geneSample <- sig_005$ensembl_gene_id
+
+
+## Generate params object
+
+params <- new("GOHyperGParams", 
+              geneIds = geneSample,
+                universeGeneIds = geneUniverse,
+                annotation="org.Hs.eg", ontology = "BP", pvalueCutoff = 0.05,
+                conditional = FALSE, testDirection = "over")
+
+
+## Run enrichment test - Hypergeometric test  
+hgOver <- hyperGTest(params)
+df<-summary(hgOver)
+  
+df$Adj.Pvalue <- p.adjust(df$Pvalue, 'bonferroni')
+
+## Viewing of results
+# summary(hgOver)
+# htmlReport(hgOver, file = "MyhyperGresult.html") # html file will be written to current working directory
+
+
+
+```
+No significant Results could be found using GO Stats.
+
+## KEGG 
+
+
+```{r}
+
+kk <- enrichKEGG(gene         = geneSample$ENTREZID,
+                 organism     = 'hsa',
+                 pvalueCutoff = 0.05)
+kk@result %>% head
+```
+
+No Results could be found using KEGG.
+
+## Reactome
+[Source](https://pnnl-comp-mass-spec.github.io/proteomics-data-analysis-tutorial/ora.html)
+
+Next we tried the pathway library reactome:
+
+```{r fig.height=8}
+# RNA
+
+
+universe <- bitr(rownames(count.matrix), 
+     fromType="ENSEMBL", toType="ENTREZID", 
+     OrgDb="org.Hs.eg.db")
+
+gcUnique <-bitr(sig_005$ensembl_gene_id, 
+     fromType="ENSEMBL", toType="ENTREZID", 
+     OrgDb="org.Hs.eg.db")
+
+react_ora <- compareCluster(
+  geneClusters = gcUnique,# our significant genes
+  fun = "enrichPathway", # ORA function to apply to each cluster
+  organism = "human",
+  pvalueCutoff = 1, # p-value filter: off
+  qvalueCutoff = 1, # q-value filter: off
+  pAdjustMethod = "BH", # p-values are adjusted within clusters
+  universe = universe, # all genes
+  minGSSize = 15,
+  maxGSSize = 500
+)
+summary(react_ora) 
+
+rnadot<- dotplot(react_ora, showCategory=10) + ggtitle("dotplot for RNA")
+rnadot
+# save plot
+ggsave(plot=rnadot,
+       filename = paste0(dir, "ANALYSIS/GoTermEnrichment/Plots/rnadot.png"),
+       height = 5, width=9,dpi=320)
+```
+
+We get multiple significant results for collagen pathways and the gene TNRF1 is mentioned multipletimes.
+There is some literature on TNRF1 and endometriosis though:
+[TNFR1](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4287594/)
+The paper mentions an downregulation of TNRF1 that can be associated with early 
+stages of endometriosis.
+TNRF1 was not one of our DEGs. The gene from our data involved in that pathway is RNF31,
+which is indeed down in our dataset but we can find no literature further linking
+it to endometriosis.
+
+Collagen was another result we could indeed find 
+[literature](https://pubmed.ncbi.nlm.nih.gov/26935598/) on. The gene in question is 
+COL1A1. The authors found overexpression of COL1A1 in perilesional tissues 
+(tissue around endometriosis lesions), but unfortunatly in our results COL1A1 is
+downregulated in patients from the diseased group compared to the control group.
+This might be for 2 reasons:
+ 1) The paper mentions that COL1A1 might be upregulated in later stages of 
+ endometriosis due to its connection to scar tissue and fibrosis. That could possibly link to the
+ downregulation found in TNFR1.
+ 
+ 2) The tissue mentioned is perilesional tissue. Unfortunately we have no further 
+ information from our data how much tissue around the lesions was collected.
+
+No further litereature coud be found.
+
+Next we continue with our DMRs:
+
+```{r fig.height=8}
+
+universemeth <- bitr(rownames(count.meth), 
+     fromType="ENSEMBL", toType="ENTREZID", 
+     OrgDb="org.Hs.eg.db")
+
+gcUniquemeth <-bitr(sig_DMR$ensembl_gene_id, 
+     fromType="ENSEMBL", toType="ENTREZID", 
+     OrgDb="org.Hs.eg.db")
+
+# query
+react_orameth <- compareCluster(
+  geneClusters = gcUniquemeth,# our significant genes
+  fun = "enrichPathway", # ORA function to apply to each cluster
+  organism = "human",
+  pvalueCutoff = 1, # p-value filter: off
+  qvalueCutoff = 1, # q-value filter: off
+  pAdjustMethod = "BH", # p-values are adjusted within clusters
+  universe = universemeth, # all genes
+  minGSSize = 15, 
+  maxGSSize = 500
+)
+
+summary(react_orameth)
+methdot <- dotplot(react_orameth, showCategory=10) + ggtitle("dotplot for Methylation")
+methdot
+
+# save plot
+ggsave(plot=methdot,
+       filename = paste0(dir, "ANALYSIS/GoTermEnrichment/Plots/methdot.png"),
+       height = 10, width=9,dpi=320)
+
+
+```
+
+IGF is mentioned here and also pops up in other anylses and our literature research.
+
+# Enrichr
+For enrichr we used the online [database](https://maayanlab.cloud/Enrichr/)
+and pasted in the DEgs and DRs.
+No significant results for most libraries.
+The few significant results not relevant biologically.
+
+# g:Profiler
+Used the online [tool](https://biit.cs.ut.ee/gprofiler/gost) and pasted in the 
+DEgs and DRs.
+No significant results for most libraries.
+The few significant results not relevant biologically.
+
+
+# DOSE
+[Source](https://yulab-smu.top/biomedical-knowledge-mining-book/dose-enrichment.html)
+Next we tried the DOSE library:
+```{r}
+
+doRna <- enrichDO(gene          = gcUnique$ENTREZID,
+              ont           = "DO",
+              pvalueCutoff  = 1,
+              pAdjustMethod = "BH",
+              universe      = universe$ENTREZID,
+              minGSSize     = 5,
+              maxGSSize     = 500,
+              qvalueCutoff  = 1,
+              readable      = FALSE)
+head(doRna)
+```
+For our DEGs we couldn't find any significant results using DOSE (p.adjust).
+
+```{r}
+
+doMeth <- enrichDO(gene          = gcUniquemeth$ENTREZID,
+              ont           = "DO",
+              pvalueCutoff  = 1,
+              pAdjustMethod = "BH",
+              universe      = universemeth$ENTREZID,
+              minGSSize     = 5,
+              maxGSSize     = 500,
+              qvalueCutoff  = 1,
+              readable      = FALSE)
+head(doMeth)
+
+```
+For our DMRs we couldn't find some significant results using DOSE (p.adjust).
+The results are for glomerulosclerosis not directly for endometriosis.
+Glomerulosclerosis is a chronic kidney disease that leads to scarring of the
+We could find a paper linking endometriosis to chronic kidney disease [CKD](https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4964455/) that mentions 
+glomerulosclerosis.
+The Genes involved here from our Dataset are HR and IGFBP3.
+For HR we could find no further Literature linking it to endometriosis.
+For [IGFBP3](https://pubmed.ncbi.nlm.nih.gov/37188982/) 
+we could find a paper linking it's upregualtion to the pathophysiology 
+of endometriosis and  its possible involvement in the ectopic growth of 
+endometriotic lesions. We could not find any information on its methylation 
+status however.
+
+```{r}
+
+save.image(paste0(dir, "ANALYSIS/GoTermEnrichment/goTermEnrichment.RData"))
+
+```
+
+#SessionInfo
+
+```{r}
+sessionInfo()
+
+```
+
+
