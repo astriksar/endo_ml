@@ -160,7 +160,7 @@ cd endo_ml
 
 ## 📄 License & Citation
 
-This project is released under the **MIT License** — see the [LICENSE](./LICENSE) file for details.  
+This project is released under the **MIT License** — see the [LICENSE](https://github.com/astriksar/endo_ml/blob/main/LICENSE) file for details.  
 You are welcome to use, modify, and build upon this code for academic or research purposes.
 
 If you use this repository or its results in your own research, **please cite as follows:**
