@@ -154,7 +154,10 @@ Multi-omics integration and ensemble learning dramatically improve classificatio
 # Clone repository
 git clone https://github.com/astriksar/endo_ml.git
 cd endo_ml
-
+```
 
 --- 
+
+
+## ✒️ Notes 
 **Additionally, a readme and a report with a detailed description of the project included.**
