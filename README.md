@@ -172,7 +172,7 @@ If you use this repository or its results in your own research, **please cite as
 Alternatively, include this citation in BibTeX format:
 
 ```bibtex
-@misc{Sarukhanyan2025EndoML,
+@misc{SarForLap2025EndoML,
   author       = {Astghik Sarukhanyan and Caroline Forsythe and Julia Lapucha},
   title        = {Endo-ML: Integrated Machine Learning and Multi-Omics Analysis for Endometriosis Biomarker Discovery},
   year         = {2025},
@@ -181,8 +181,4 @@ Alternatively, include this citation in BibTeX format:
   howpublished = {\url{https://github.com/astriksar/endo_ml}},
   license      = {MIT}
 }
-
-
-
-
 --- 
