@@ -157,7 +157,3 @@ cd endo_ml
 ```
 
 --- 
-
-
-## ✒️ Notes 
-**Additionally, a readme and a report with a detailed description of the project included.**
