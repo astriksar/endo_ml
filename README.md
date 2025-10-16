@@ -1,11 +1,40 @@
-# Predicting Endometriosis: A Machine Learning Approach to Biomarker Discovery from RNA-Seq and Methylation Data
+# 🧬 Endo-ML: Machine Learning for Endometriosis Biomarker Discovery
 
-**A readme and report with a detailed description of the project and a subsequent report were included.**
+A multimodal bioinformatics and machine learning project for identifying biomarkers and predicting endometriosis status using RNA-Seq and DNA methylation data.
+
 ---
 
-The main goal of this project is to find potential biomarkers for endometriosis by combining information from gene expression (RNA-seq) and DNA methylation (MBD-seq) data. 
+## 🚀 Overview & Motivation
 
-We aim to identify specific genes and gene expression patterns that differ between endometriosis and healthy patients. Furthermore, machine learning techniques will be employed to predict disease based on significant
-results from differential gene expression and differential methylation analysis.
+Endometriosis is an under-researched gynecological disorder affecting an estimated 5–10 % of women.  
+Current diagnostics are invasive and often delayed.  
+This project applies **bioinformatics and ML techniques** to support **non-invasive diagnosis** and **molecular understanding** of endometriosis.
 
-Endometriosis is a condition that currently requires invasive diagnostic and therapeutic procedures. As a predominately female group, we have a strong commitment to advancing women’s health and are passionate about contributing to improvements in this field through modern bioinformatic workflows like differential gene expression and methylation analysis, GO enrichment analysis, and various machine learning approaches.
+It demonstrates:
+- Differential gene expression analysis (RNA-Seq)
+- Differential methylation analysis (e.g., MBD-Seq)
+- Multi-omics integration
+- Supervised ML models for disease prediction
+- Feature selection and biological interpretation (GO / pathway enrichment)
+
+Together, this showcases strong competence in **data preprocessing, feature engineering, model development, and biological reasoning**.
+
+---
+
+## 🧠 Key Features
+
+
+
+---
+## 🧰 Tech Stack
+
+
+---
+
+## 📁 Project Structure
+
+
+
+
+--- 
+**Additionally, a readme and a report with a detailed description of the project included.**
