@@ -156,4 +156,33 @@ git clone https://github.com/astriksar/endo_ml.git
 cd endo_ml
 ```
 
+---
+
+## 📄 License & Citation
+
+This project is released under the **MIT License** — see the [LICENSE](./LICENSE) file for details.  
+You are welcome to use, modify, and build upon this code for academic or research purposes.
+
+If you use this repository or its results in your own research, **please cite as follows:**
+
+> **Sarukhanyan, A., Forsythe, C., & Lapucha, J. (2025).**  
+> *Endo-ML: Integrated Machine Learning and Multi-Omics Analysis for Endometriosis Biomarker Discovery.*  
+> GitHub Repository: [https://github.com/astriksar/endo_ml](https://github.com/astriksar/endo_ml)
+
+Alternatively, include this citation in BibTeX format:
+
+```bibtex
+@misc{Sarukhanyan2025EndoML,
+  author       = {Astghik Sarukhanyan and Caroline Forsythe and Julia Lapucha},
+  title        = {Endo-ML: Integrated Machine Learning and Multi-Omics Analysis for Endometriosis Biomarker Discovery},
+  year         = {2025},
+  publisher    = {GitHub},
+  journal      = {GitHub repository},
+  howpublished = {\url{https://github.com/astriksar/endo_ml}},
+  license      = {MIT}
+}
+
+
+
+
 --- 
